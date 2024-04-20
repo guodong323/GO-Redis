@@ -92,6 +92,12 @@ func (stringData *StringData) String() string {
 	return stringData.data
 }
 
+func MakeIntData(data int64) *IntData {
+	return &IntData{
+		data: data,
+	}
+}
+
 func (intData *IntData) ToBytes() []byte {
 	return []byte(":" + strconv.FormatInt(intData.data, 10) + CRLF)
 }
