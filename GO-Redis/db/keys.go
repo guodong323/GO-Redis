@@ -6,10 +6,24 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // implements the keys commands of redis
+
+func RegisterKeyCommands() {
+	RegisterCommand("ping", pingKeys)
+	RegisterCommand("del", deleteKey)
+	RegisterCommand("exists", existsKey)
+	RegisterCommand("keys", keysKey)
+	RegisterCommand("expire", expireKey)
+	RegisterCommand("persist", persistKey)
+	RegisterCommand("ttl", ttlKey)
+	//RegisterCommand("type", typeKey)
+	RegisterCommand("rename", renameKey)
+}
 
 func deleteKey(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) Data.RedisData {
 	cmdName := string(cmd[0])
@@ -73,6 +87,184 @@ func keysKey(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) Data.Redi
 		}
 	}
 	return Data.MakeArrayData(res)
+}
+
+// expireKey 续约等操作的实现
+func expireKey(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) Data.RedisData {
+	cmdName := string(cmd[0])
+	if strings.ToLower(cmdName) != "expire" || len(cmd) < 3 || len(cmd) > 4 {
+		log.Printf("expireKey Function: cmdName is not expire or command args number is invalid")
+		return Data.MakeErrorData("error: cmdName is not expire or command args number is invalid")
+	}
+
+	value, err := strconv.ParseInt(string(cmd[2]), 10, 64)
+	if err != nil {
+		log.Printf("expireKey Function: cmd[2] %s is not int", string(cmd[2]))
+		return Data.MakeErrorData(fmt.Sprintf("error: %s is not int", string(cmd[2])))
+	}
+	ttl := time.Now().Unix() + value
+	var op string
+	if len(cmd) == 4 {
+		op = strings.ToLower(string(cmd[3]))
+	}
+	key := string(cmd[1])
+	if !db.CheckTTL(key) {
+		return Data.MakeIntData(int64(0))
+	}
+	db.locks.Lock(key)
+	defer db.locks.UnLock(key)
+
+	var res bool
+	switch op {
+	case "nx":
+		if _, OK := db.ttlKeys.Get(key); !OK {
+			res = db.SetTTL(key, ttl)
+		}
+	case "xx":
+		if _, OK := db.ttlKeys.Get(key); !OK {
+			res = db.SetTTL(key, ttl)
+		}
+	case "gt":
+		if v, OK := db.ttlKeys.Get(key); OK && ttl > v.(*TTLInfo).value {
+			res = db.SetTTL(key, ttl)
+		}
+	case "lt":
+		if v, OK := db.ttlKeys.Get(key); OK && ttl < v.(*TTLInfo).value {
+			res = db.SetTTL(key, ttl)
+		}
+	default:
+		if op != "" {
+			log.Printf("expireKey Function: opt %s is not nx, xx, gt or lt", op)
+			return Data.MakeErrorData(fmt.Sprintf(fmt.Sprintf("ERROR Unsupported option %s, except nx, xx, gt, lt", op)))
+		}
+		res = db.SetTTL(key, ttl)
+	}
+	var data int
+	if res {
+		data = 1
+	} else {
+		data = 0
+	}
+	return Data.MakeIntData(int64(data))
+}
+
+// persisKey 删除kv的ttl，而不删除kv，从而使得其永久化
+func persistKey(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) Data.RedisData {
+	cmdName := string(cmd[0])
+	if strings.ToLower(cmdName) != "persist" || len(cmd) != 2 {
+		log.Printf("persistKey Function: cmdName is not persist or command args number is invalid")
+		return Data.MakeErrorData("error: cmdName is not persist or command args number is invalid")
+	}
+	key := string(cmd[1])
+	if !db.CheckTTL(key) {
+		return Data.MakeIntData(int64(0))
+	}
+	db.locks.Lock(key)
+	defer db.locks.UnLock(key)
+
+	res := db.DeleteTTL(key)
+	var data int
+	if res {
+		data = 1
+	} else {
+		data = 0
+	}
+	return Data.MakeIntData(int64(data))
+}
+
+// ttlKey 获取指定键的剩余生存时间（TTL）的 "ttl" 命令
+func ttlKey(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) Data.RedisData {
+	cmdName := string(cmd[0])
+	if strings.ToLower(cmdName) != "ttl" || len(cmd) != 2 {
+		log.Printf("ttlKey Function: cmdName is not ttl or command args number is invalid")
+		return Data.MakeErrorData("error: cmdName is not ttl or command args number is invalid")
+	}
+	key := string(cmd[1])
+	if !db.CheckTTL(key) {
+		return Data.MakeIntData(int64(0))
+	}
+	db.locks.RLock(key)
+	defer db.locks.RUnLock(key)
+
+	if _, OK := db.db.Get(key); !OK {
+		return Data.MakeIntData(int64(-2))
+	}
+	now := time.Now().Unix()
+	ttl, OK := db.ttlKeys.Get(key)
+	if !OK {
+		return Data.MakeIntData(int64(-1))
+	}
+	var res int64
+	res = ttl.(*TTLInfo).value - now
+	return Data.MakeIntData(res)
+}
+
+//func typeKey(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) Data.RedisData {
+//	cmdName := string(cmd[0])
+//	if strings.ToLower(cmdName) != "type" || len(cmd) != 2 {
+//		log.Printf("typeKey Function: cmdName is not type or command args number is invalid")
+//		return Data.MakeErrorData("error: cmdName is not type or command args number is invalid")
+//	}
+//	key := string(cmd[1])
+//	if !db.CheckTTL(key) {
+//		return Data.MakeBulkData([]byte("none"))
+//	}
+//	db.locks.RLock(key)
+//	defer db.locks.RUnLock(key)
+//	v, OK := db.db.Get(key)
+//	if !OK {
+//		return Data.MakeStringData("none")
+//	}
+//	//
+//
+//	return Data.MakeErrorData("unknown error: server error")
+//}
+
+func renameKey(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) Data.RedisData {
+	cmdName := string(cmd[0])
+	if strings.ToLower(cmdName) != "rename" || len(cmd) != 3 {
+		log.Printf("renameKey Function: cmdName is not rename or command args number is invalid")
+		return Data.MakeErrorData("error: cmdName is not rename or command args number is invalid")
+	}
+	oldName, newName := string(cmd[1]), string(cmd[2])
+	if db.CheckTTL(oldName) {
+		return Data.MakeErrorData(fmt.Sprintf("error: %s not exist", oldName))
+	}
+	db.locks.LockMulti([]string{oldName, newName})
+	defer db.locks.UnLockMulti([]string{oldName, newName})
+
+	oldValue, OK := db.db.Get(oldName)
+	if !OK {
+		return Data.MakeErrorData(fmt.Sprintf("error: %s not exist", oldName))
+	}
+	oldTTL, OK := db.ttlKeys.Get(oldName)
+	if !OK {
+		return Data.MakeErrorData(fmt.Sprintf("error: %s not exist", oldTTL))
+	}
+	// 先删除老的
+	db.db.Delete(oldName)
+	db.ttlKeys.Delete(oldName)
+
+	// 再删除新的
+	db.db.Delete(newName)
+	db.ttlKeys.Delete(newName)
+
+	// 再设置新的
+	db.db.Set(newName, oldValue)
+	db.ttlKeys.Set(newName, oldTTL)
+
+	return Data.MakeStringData("OK")
+}
+
+func pingKeys(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) Data.RedisData {
+	if len(cmd) > 2 {
+		return Data.MakeErrorData("error: wrong number of arguments for 'ping' command")
+	}
+	// default reply
+	if len(cmd) == 1 {
+		return Data.MakeStringData("PONG")
+	}
+	return Data.MakeBulkData(cmd[1])
 }
 
 // PattenMatch matches a string with a wildcard pattern.

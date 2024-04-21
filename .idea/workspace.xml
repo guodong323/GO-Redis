@@ -5,7 +5,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="9421920d-afb4-4c6a-a6cc-806b18031b23" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/GO-Redis/Data/structure.go" beforeDir="false" afterPath="$PROJECT_DIR$/GO-Redis/Data/structure.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/GO-Redis/db/command.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/GO-Redis/db/keys.go" beforeDir="false" afterPath="$PROJECT_DIR$/GO-Redis/db/keys.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -31,6 +32,9 @@
   &quot;associatedIndex&quot;: 7
 }</component>
   <component name="ProjectId" id="2fHeG5yTi2pKMkq9jYLZ5IlhzQI" />
+  <component name="ProjectLevelVcsManager">
+    <ConfirmationsSetting value="2" id="Add" />
+  </component>
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
