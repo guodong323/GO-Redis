@@ -5,8 +5,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="9421920d-afb4-4c6a-a6cc-806b18031b23" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/GO-Redis/db/command.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/GO-Redis/db/string.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/GO-Redis/Data/structure.go" beforeDir="false" afterPath="$PROJECT_DIR$/GO-Redis/data/structure.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/GO-Redis/db/command.go" beforeDir="false" afterPath="$PROJECT_DIR$/GO-Redis/db/command.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/GO-Redis/db/keys.go" beforeDir="false" afterPath="$PROJECT_DIR$/GO-Redis/db/keys.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -59,6 +61,7 @@
 }]]></component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/GO-Redis/db" />
       <recent name="$PROJECT_DIR$/config" />
     </key>
   </component>

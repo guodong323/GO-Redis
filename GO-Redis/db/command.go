@@ -1,7 +1,7 @@
 package db
 
 import (
-	"GO-Redis/Data"
+	"GO-Redis/data"
 	"context"
 	"net"
 	"strings"
@@ -11,7 +11,7 @@ type cmdBytes = [][]byte
 
 var cmdTable = make(map[string]*command)
 
-type cmdExecutor func(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) Data.RedisData
+type cmdExecutor func(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) data.RedisData
 type command struct {
 	Executor cmdExecutor
 }

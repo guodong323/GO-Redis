@@ -1,7 +1,7 @@
 package db
 
 import (
-	"GO-Redis/Data"
+	"GO-Redis/data"
 	"context"
 	"fmt"
 	"log"
@@ -25,15 +25,15 @@ func RegisterKeyCommands() {
 	RegisterCommand("rename", renameKey)
 }
 
-func deleteKey(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) Data.RedisData {
+func deleteKey(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) data.RedisData {
 	cmdName := string(cmd[0])
 	if strings.ToLower(cmdName) != "delete" {
 		log.Printf("deleteKey Function: cmdName is not delete")
-		return Data.MakeErrorData("protocol Error: cmdName is not delete")
+		return data.MakeErrorData("protocol Error: cmdName is not delete")
 	}
 	// if already expires
 	if db.CheckTTL(string(cmd[1])) {
-		return Data.MakeIntData(int64(0))
+		return data.MakeIntData(int64(0))
 	}
 	// record the number of delete keys
 	count := 0
@@ -47,14 +47,14 @@ func deleteKey(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) Data.Re
 		db.ttlKeys.Delete(cur)
 		db.locks.UnLock(cur)
 	}
-	return Data.MakeIntData(int64(count))
+	return data.MakeIntData(int64(count))
 }
 
-func existsKey(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) Data.RedisData {
+func existsKey(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) data.RedisData {
 	cmdName := string(cmd[0])
 	if strings.ToLower(cmdName) != "exists" || len(cmd) < 2 {
 		log.Println("existsKey Function: cmdName is not exists or command args number is invalid")
-		return Data.MakeErrorData("Protocol error: cmdName is not exists")
+		return data.MakeErrorData("Protocol error: cmdName is not exists")
 	}
 	count := 0
 	var key string
@@ -68,39 +68,39 @@ func existsKey(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) Data.Re
 			db.locks.RUnLock(key)
 		}
 	}
-	return Data.MakeIntData(int64(count))
+	return data.MakeIntData(int64(count))
 }
 
-func keysKey(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) Data.RedisData {
+func keysKey(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) data.RedisData {
 	if strings.ToLower(string(cmd[0])) != "keys" || len(cmd) != 2 {
 		log.Printf("keysKey Function: cmdName is not keys or cmd length is not 2")
-		return Data.MakeErrorData(fmt.Sprintf("error: keys function get invalid command %s %s", string(cmd[0]), string(cmd[1])))
+		return data.MakeErrorData(fmt.Sprintf("error: keys function get invalid command %s %s", string(cmd[0]), string(cmd[1])))
 	}
-	res := make([]Data.RedisData, 0)
+	res := make([]data.RedisData, 0)
 	allKeys := db.db.Keys()
 	pattern := string(cmd[1])
 	for _, key := range allKeys {
 		if db.CheckTTL(key) {
 			if PattenMatch(pattern, key) {
-				res = append(res, Data.MakeBulkData([]byte(key)))
+				res = append(res, data.MakeBulkData([]byte(key)))
 			}
 		}
 	}
-	return Data.MakeArrayData(res)
+	return data.MakeArrayData(res)
 }
 
 // expireKey 续约等操作的实现
-func expireKey(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) Data.RedisData {
+func expireKey(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) data.RedisData {
 	cmdName := string(cmd[0])
 	if strings.ToLower(cmdName) != "expire" || len(cmd) < 3 || len(cmd) > 4 {
 		log.Printf("expireKey Function: cmdName is not expire or command args number is invalid")
-		return Data.MakeErrorData("error: cmdName is not expire or command args number is invalid")
+		return data.MakeErrorData("error: cmdName is not expire or command args number is invalid")
 	}
 
 	value, err := strconv.ParseInt(string(cmd[2]), 10, 64)
 	if err != nil {
 		log.Printf("expireKey Function: cmd[2] %s is not int", string(cmd[2]))
-		return Data.MakeErrorData(fmt.Sprintf("error: %s is not int", string(cmd[2])))
+		return data.MakeErrorData(fmt.Sprintf("error: %s is not int", string(cmd[2])))
 	}
 	ttl := time.Now().Unix() + value
 	var op string
@@ -109,7 +109,7 @@ func expireKey(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) Data.Re
 	}
 	key := string(cmd[1])
 	if !db.CheckTTL(key) {
-		return Data.MakeIntData(int64(0))
+		return data.MakeIntData(int64(0))
 	}
 	db.locks.Lock(key)
 	defer db.locks.UnLock(key)
@@ -135,111 +135,111 @@ func expireKey(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) Data.Re
 	default:
 		if op != "" {
 			log.Printf("expireKey Function: opt %s is not nx, xx, gt or lt", op)
-			return Data.MakeErrorData(fmt.Sprintf(fmt.Sprintf("ERROR Unsupported option %s, except nx, xx, gt, lt", op)))
+			return data.MakeErrorData(fmt.Sprintf(fmt.Sprintf("ERROR Unsupported option %s, except nx, xx, gt, lt", op)))
 		}
 		res = db.SetTTL(key, ttl)
 	}
-	var data int
+	var count int
 	if res {
-		data = 1
+		count = 1
 	} else {
-		data = 0
+		count = 0
 	}
-	return Data.MakeIntData(int64(data))
+	return data.MakeIntData(int64(count))
 }
 
 // persisKey 删除kv的ttl，而不删除kv，从而使得其永久化
-func persistKey(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) Data.RedisData {
+func persistKey(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) data.RedisData {
 	cmdName := string(cmd[0])
 	if strings.ToLower(cmdName) != "persist" || len(cmd) != 2 {
 		log.Printf("persistKey Function: cmdName is not persist or command args number is invalid")
-		return Data.MakeErrorData("error: cmdName is not persist or command args number is invalid")
+		return data.MakeErrorData("error: cmdName is not persist or command args number is invalid")
 	}
 	key := string(cmd[1])
 	if !db.CheckTTL(key) {
-		return Data.MakeIntData(int64(0))
+		return data.MakeIntData(int64(0))
 	}
 	db.locks.Lock(key)
 	defer db.locks.UnLock(key)
 
 	res := db.DeleteTTL(key)
-	var data int
+	var count int
 	if res {
-		data = 1
+		count = 1
 	} else {
-		data = 0
+		count = 0
 	}
-	return Data.MakeIntData(int64(data))
+	return data.MakeIntData(int64(count))
 }
 
 // ttlKey 获取指定键的剩余生存时间（TTL）的 "ttl" 命令
-func ttlKey(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) Data.RedisData {
+func ttlKey(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) data.RedisData {
 	cmdName := string(cmd[0])
 	if strings.ToLower(cmdName) != "ttl" || len(cmd) != 2 {
 		log.Printf("ttlKey Function: cmdName is not ttl or command args number is invalid")
-		return Data.MakeErrorData("error: cmdName is not ttl or command args number is invalid")
+		return data.MakeErrorData("error: cmdName is not ttl or command args number is invalid")
 	}
 	key := string(cmd[1])
 	if !db.CheckTTL(key) {
-		return Data.MakeIntData(int64(0))
+		return data.MakeIntData(int64(0))
 	}
 	db.locks.RLock(key)
 	defer db.locks.RUnLock(key)
 
 	if _, OK := db.db.Get(key); !OK {
-		return Data.MakeIntData(int64(-2))
+		return data.MakeIntData(int64(-2))
 	}
 	now := time.Now().Unix()
 	ttl, OK := db.ttlKeys.Get(key)
 	if !OK {
-		return Data.MakeIntData(int64(-1))
+		return data.MakeIntData(int64(-1))
 	}
 	var res int64
 	res = ttl.(*TTLInfo).value - now
-	return Data.MakeIntData(res)
+	return data.MakeIntData(res)
 }
 
-//func typeKey(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) Data.RedisData {
+//func typeKey(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) data.RedisData {
 //	cmdName := string(cmd[0])
 //	if strings.ToLower(cmdName) != "type" || len(cmd) != 2 {
 //		log.Printf("typeKey Function: cmdName is not type or command args number is invalid")
-//		return Data.MakeErrorData("error: cmdName is not type or command args number is invalid")
+//		return data.MakeErrorData("error: cmdName is not type or command args number is invalid")
 //	}
 //	key := string(cmd[1])
 //	if !db.CheckTTL(key) {
-//		return Data.MakeBulkData([]byte("none"))
+//		return data.MakeBulkData([]byte("none"))
 //	}
 //	db.locks.RLock(key)
 //	defer db.locks.RUnLock(key)
 //	v, OK := db.db.Get(key)
 //	if !OK {
-//		return Data.MakeStringData("none")
+//		return data.MakeStringData("none")
 //	}
 //	//
 //
-//	return Data.MakeErrorData("unknown error: server error")
+//	return data.MakeErrorData("unknown error: server error")
 //}
 
-func renameKey(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) Data.RedisData {
+func renameKey(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) data.RedisData {
 	cmdName := string(cmd[0])
 	if strings.ToLower(cmdName) != "rename" || len(cmd) != 3 {
 		log.Printf("renameKey Function: cmdName is not rename or command args number is invalid")
-		return Data.MakeErrorData("error: cmdName is not rename or command args number is invalid")
+		return data.MakeErrorData("error: cmdName is not rename or command args number is invalid")
 	}
 	oldName, newName := string(cmd[1]), string(cmd[2])
 	if db.CheckTTL(oldName) {
-		return Data.MakeErrorData(fmt.Sprintf("error: %s not exist", oldName))
+		return data.MakeErrorData(fmt.Sprintf("error: %s not exist", oldName))
 	}
 	db.locks.LockMulti([]string{oldName, newName})
 	defer db.locks.UnLockMulti([]string{oldName, newName})
 
 	oldValue, OK := db.db.Get(oldName)
 	if !OK {
-		return Data.MakeErrorData(fmt.Sprintf("error: %s not exist", oldName))
+		return data.MakeErrorData(fmt.Sprintf("error: %s not exist", oldName))
 	}
 	oldTTL, OK := db.ttlKeys.Get(oldName)
 	if !OK {
-		return Data.MakeErrorData(fmt.Sprintf("error: %s not exist", oldTTL))
+		return data.MakeErrorData(fmt.Sprintf("error: %s not exist", oldTTL))
 	}
 	// 先删除老的
 	db.db.Delete(oldName)
@@ -253,18 +253,18 @@ func renameKey(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) Data.Re
 	db.db.Set(newName, oldValue)
 	db.ttlKeys.Set(newName, oldTTL)
 
-	return Data.MakeStringData("OK")
+	return data.MakeStringData("OK")
 }
 
-func pingKeys(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) Data.RedisData {
+func pingKeys(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) data.RedisData {
 	if len(cmd) > 2 {
-		return Data.MakeErrorData("error: wrong number of arguments for 'ping' command")
+		return data.MakeErrorData("error: wrong number of arguments for 'ping' command")
 	}
 	// default reply
 	if len(cmd) == 1 {
-		return Data.MakeStringData("PONG")
+		return data.MakeStringData("PONG")
 	}
-	return Data.MakeBulkData(cmd[1])
+	return data.MakeBulkData(cmd[1])
 }
 
 // PattenMatch matches a string with a wildcard pattern.
