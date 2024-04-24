@@ -6,9 +6,11 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"net"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func lLenList(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) data.RedisData {
@@ -83,7 +85,7 @@ func lIndexList(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) data.R
 	return data.MakeBulkData(resNode.Val)
 }
 
-func lPostList(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) data.RedisData {
+func lPosList(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) data.RedisData {
 	if strings.ToLower(string(cmd[0])) != "lpos" {
 		log.Printf("lPosList Function: cmdName is not lpos")
 		return data.MakeErrorData("server error")
@@ -467,6 +469,39 @@ func lPushXList(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) data.R
 	return data.MakeIntData(int64(list.Len))
 }
 
+func rPushList(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) data.RedisData {
+	if strings.ToLower(string(cmd[0])) != "rpush" {
+		log.Printf("rPushList Function: cmdName is not rpush")
+		return data.MakeErrorData("server error")
+	}
+	if len(cmd) < 3 {
+		return data.MakeErrorData("wrong number of arguments for 'rpush' command")
+	}
+
+	key := string(cmd[1])
+	db.CheckTTL(key)
+
+	db.locks.Lock(key)
+	defer db.locks.UnLock(key)
+
+	var list *List
+	tem, ok := db.db.Get(key)
+	if !ok {
+		list = NewList()
+		db.db.Set(key, list)
+	} else {
+		list, ok = tem.(*List)
+		if !ok {
+			return data.MakeErrorData("WRONGTYPE Operation against a key holding the wrong kind of value")
+		}
+	}
+	for i := 2; i < len(cmd); i++ {
+		list.RPush(cmd[i])
+	}
+
+	return data.MakeIntData(int64(list.Len))
+}
+
 func rPushXList(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) data.RedisData {
 	if strings.ToLower(string(cmd[0])) != "rpushx" {
 		log.Printf("rPushXList Function : cmdName is not rpushx")
@@ -539,4 +574,323 @@ func lSetList(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) data.Red
 	}
 
 	return data.MakeStringData("OK")
+}
+
+func lRemList(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) data.RedisData {
+	if strings.ToLower(string(cmd[0])) != "lrem" {
+		log.Printf("lRemList Function : cmdName is not lrem")
+		return data.MakeErrorData("server error")
+	}
+
+	if len(cmd) != 4 {
+		return data.MakeErrorData("wrong number of arguments for 'lrem' command")
+	}
+
+	count, err := strconv.Atoi(string(cmd[2]))
+	if err != nil {
+		return data.MakeErrorData("count must be an integer")
+	}
+
+	key := string(cmd[1])
+	if !db.CheckTTL(key) {
+		return data.MakeIntData(0)
+	}
+
+	db.locks.Lock(key)
+	defer db.locks.UnLock(key)
+
+	tem, ok := db.db.Get(key)
+	if !ok {
+		return data.MakeIntData(0)
+	}
+
+	list, ok := tem.(*List)
+	if !ok {
+		return data.MakeErrorData("WRONGTYPE Operation against a key holding the wrong kind of value")
+	}
+
+	defer func() {
+		if list.Len == 0 {
+			db.db.Delete(key)
+			db.DeleteTTL(key)
+		}
+	}()
+
+	res := list.RemoveElement(cmd[3], count)
+
+	return data.MakeIntData(int64(res))
+}
+
+func lTrimList(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) data.RedisData {
+	if strings.ToLower(string(cmd[0])) != "ltrim" {
+		log.Printf("lTrimList Function : cmdName is not ltrim")
+		return data.MakeErrorData("server error")
+	}
+
+	if len(cmd) != 4 {
+		return data.MakeErrorData("wrong number of arguments for 'ltrim' command")
+	}
+
+	start, err1 := strconv.Atoi(string((cmd[2])))
+	end, err2 := strconv.Atoi(string(cmd[3]))
+
+	if err1 != nil || err2 != nil {
+		return data.MakeErrorData("start and end must be an integer")
+	}
+
+	key := string(cmd[1])
+	if !db.CheckTTL(key) {
+		return data.MakeStringData("OK")
+	}
+
+	db.locks.Lock(key)
+	defer db.locks.UnLock(key)
+
+	tem, ok := db.db.Get(key)
+	if !ok {
+		return data.MakeStringData("OK")
+	}
+
+	list, ok := tem.(*List)
+	if !ok {
+		return data.MakeErrorData("WRONGTYPE Operation against a key holding the wrong kind of value")
+	}
+
+	defer func() {
+		if list.Len == 0 {
+			db.db.Delete(key)
+			db.DeleteTTL(key)
+		}
+	}()
+
+	list.Trim(start, end)
+
+	return data.MakeStringData("OK")
+}
+
+func lRangeList(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) data.RedisData {
+	if strings.ToLower(string(cmd[0])) != "lrange" {
+		log.Printf("lRangeList Function : cmdName is not lrange")
+		return data.MakeErrorData("serve error")
+	}
+
+	if len(cmd) != 4 {
+		return data.MakeErrorData("wrong number of arguments for 'lrange' command")
+	}
+
+	start, err1 := strconv.Atoi(string(cmd[2]))
+	end, err2 := strconv.Atoi(string(cmd[3]))
+
+	if err1 != nil || err2 != nil {
+		return data.MakeErrorData("index must be an integer")
+	}
+
+	key := string(cmd[1])
+	if !db.CheckTTL(key) {
+		return data.MakeEmptyArrayData()
+	}
+
+	db.locks.RLock(key)
+	defer db.locks.RUnLock(key)
+
+	tem, ok := db.db.Get(key)
+	if !ok {
+		return data.MakeEmptyArrayData()
+	}
+
+	list, ok := tem.(*List)
+	if !ok {
+		return data.MakeErrorData("WRONGTYPE Operation against a key holding the wrong kind of value")
+	}
+
+	temRes := list.Range(start, end)
+	if temRes == nil {
+		return data.MakeEmptyArrayData()
+	}
+
+	res := make([]data.RedisData, len(temRes))
+	for i := 0; i < len(temRes); i++ {
+		res[i] = data.MakeBulkData(temRes[i])
+	}
+
+	return data.MakeArrayData(res)
+}
+
+func lMoveList(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) data.RedisData {
+	if strings.ToLower(string(cmd[0])) != "lmove" {
+		log.Printf("lMoveList Function : cmdName is not lmove")
+		return data.MakeErrorData("server error")
+	}
+
+	if len(cmd) != 5 {
+		return data.MakeErrorData("wrong number of arguments for 'lmove' command")
+	}
+
+	src := string(cmd[1])
+	des := string(cmd[2])
+
+	srcDrc := strings.ToLower(string(cmd[3]))
+	desDrc := strings.ToLower(string(cmd[4]))
+
+	if (srcDrc != "left" && srcDrc != "right") || (desDrc != "left" && desDrc != "right") {
+		return data.MakeErrorData("options must be left or right")
+	}
+
+	if !db.CheckTTL(src) {
+		return data.MakeBulkData(nil)
+	}
+
+	db.CheckTTL(des)
+
+	keys := []string{src, des}
+
+	db.locks.LockMulti(keys)
+	defer db.locks.UnLockMulti(keys)
+
+	srcTem, ok := db.db.Get(src)
+	if !ok {
+		return data.MakeBulkData(nil)
+	}
+
+	srcList, ok := srcTem.(*List)
+	if !ok {
+		return data.MakeErrorData("WRONGTYPE Operation against a key holding the wrong kind of value")
+	}
+
+	defer func() {
+		if srcList.Len == 0 {
+			db.db.Delete(src)
+			db.DeleteTTL(src)
+		}
+	}()
+
+	if srcList.Len == 0 {
+		return data.MakeBulkData(nil)
+	}
+
+	desTem, ok := db.db.Get(des)
+	if !ok {
+		desTem = NewList()
+		db.db.Set(des, desTem)
+	}
+
+	desList, ok := desTem.(*List)
+	if !ok {
+		return data.MakeErrorData("WRONGTYPE Operation against a key holding the wrong kind of value")
+	}
+
+	// pop from src
+	var popElem *ListNode
+	if srcDrc == "left" {
+		popElem = srcList.LPop()
+	} else {
+		popElem = srcList.RPop()
+	}
+
+	// insert to des
+	if desDrc == "left" {
+		desList.LPush(popElem.Val)
+	} else {
+		desList.RPush(popElem.Val)
+	}
+
+	return data.MakeBulkData(popElem.Val)
+}
+
+func blPopList(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) data.RedisData {
+	// at least 3 args like "BLPOP" key timeout"
+	if len(cmd) < 3 {
+		return data.MakeErrorData("ERROR wrong number of arguments for 'blpop' command")
+	}
+	return bXPopList(ctx, db, cmd, "left")
+}
+
+func brPopList(ctx context.Context, db *DB, cmd [][]byte, conn net.Conn) data.RedisData {
+	// at least 3 args like "BRPOP" key timeout"
+	if len(cmd) < 3 {
+		return data.MakeErrorData("ERROR wrong number of arguments for 'brpop' command")
+	}
+	return bXPopList(ctx, db, cmd, "right")
+}
+
+func bXPopList(ctx context.Context, db *DB, cmd [][]byte, direction string) data.RedisData {
+	// last arg is block timeout
+	timeout, err := strconv.Atoi(string(cmd[len(cmd)-1]))
+	if err != nil {
+		return data.MakeErrorData("ERROR timeout is not a float or out of range")
+	}
+	var timer *time.Timer
+	if timeout == 0 {
+		timer = time.NewTimer(math.MaxInt)
+	} else {
+		timer = time.NewTimer(time.Duration(timeout) * time.Second)
+	}
+
+	// query interval (this could be narrowed down to query more frequently but will use more CPU resource)
+	ticker := time.NewTicker(100 * time.Millisecond)
+
+	// retrieve all list Names
+	keyBytes := cmd[1 : len(cmd)-1]
+	keyStrings := make([]string, 0, len(keyBytes))
+	for _, bStr := range keyBytes {
+		keyStrings = append(keyStrings, string(bStr))
+	}
+	left := "left"
+	right := "right"
+
+	// block (will return inside the infinite loop)
+	for {
+		select {
+		// time to query keys
+		case <-ticker.C:
+			for _, key := range keyStrings {
+				// lock db actions
+				db.locks.Lock(key)
+				// get key
+				tmp, ok := db.db.Get(key)
+				// key exist
+				if ok {
+					// assert is List
+					list, isList := tmp.(*List)
+					if isList {
+						// Pop from list
+						var node *ListNode
+						if direction == left {
+							node = list.LPop()
+						} else if direction == right {
+							node = list.RPop()
+						}
+						if node != nil {
+							// find a value. need to manually release the lock since we are leaving this scope
+							db.locks.UnLock(key)
+							return data.MakeArrayData([]data.RedisData{data.MakeStringData(key), data.MakeBulkData(node.Val)})
+						}
+					}
+				}
+				// will finally release the lock here if nothing available
+				db.locks.UnLock(key)
+			}
+		// timeout
+		case <-timer.C:
+			return data.MakeBulkData(nil)
+		}
+	}
+}
+func RegisterListCommands() {
+	RegisterCommand("llen", lLenList)
+	RegisterCommand("lindex", lIndexList)
+	RegisterCommand("lpos", lPosList)
+	RegisterCommand("lpop", lPopList)
+	RegisterCommand("rpop", rPopList)
+	RegisterCommand("lpush", lPushList)
+	RegisterCommand("lpushx", lPushXList)
+	RegisterCommand("rpush", rPushList)
+	RegisterCommand("rpushx", rPushXList)
+	RegisterCommand("lset", lSetList)
+	RegisterCommand("lrem", lRemList)
+	RegisterCommand("ltrim", lTrimList)
+	RegisterCommand("lrange", lRangeList)
+	RegisterCommand("lmove", lMoveList)
+	RegisterCommand("blpop", blPopList)
+	RegisterCommand("brpop", brPopList)
 }
