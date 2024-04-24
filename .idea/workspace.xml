@@ -5,11 +5,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="9421920d-afb4-4c6a-a6cc-806b18031b23" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/GO-Redis/db/string.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/GO-Redis/db/list.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/GO-Redis/db/list_structure.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/GO-Redis/Data/structure.go" beforeDir="false" afterPath="$PROJECT_DIR$/GO-Redis/data/structure.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/GO-Redis/db/command.go" beforeDir="false" afterPath="$PROJECT_DIR$/GO-Redis/db/command.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/GO-Redis/db/keys.go" beforeDir="false" afterPath="$PROJECT_DIR$/GO-Redis/db/keys.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -64,6 +62,21 @@
       <recent name="$PROJECT_DIR$/GO-Redis/db" />
       <recent name="$PROJECT_DIR$/config" />
     </key>
+  </component>
+  <component name="RunManager">
+    <configuration name="go build list.go" type="GoApplicationRunConfiguration" factoryName="Go Application" temporary="true" nameIsGenerated="true">
+      <module name="GO-Redis" />
+      <working_directory value="$PROJECT_DIR$/GO-Redis" />
+      <kind value="FILE" />
+      <directory value="$PROJECT_DIR$" />
+      <filePath value="$PROJECT_DIR$/GO-Redis/db/list.go" />
+      <method v="2" />
+    </configuration>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Go Build.go build list.go" />
+      </list>
+    </recent_temporary>
   </component>
   <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
   <component name="TypeScriptGeneratedFilesManager">
